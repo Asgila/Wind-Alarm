@@ -1,0 +1,30 @@
+{
+  "project_info": {
+    "project_number": "914987001196",
+    "firebase_url": "https://wind-alarm-default-rtdb.europe-west1.firebasedatabase.app",
+    "project_id": "wind-alarm",
+    "storage_bucket": "wind-alarm.firebasestorage.app"
+  },
+  "client": [
+    {
+      "client_info": {
+        "mobilesdk_app_id": "1:914987001196:android:090774c4f60a9425313f49",
+        "android_client_info": {
+          "package_name": "com.example.wind_alarm_app"
+        }
+      },
+      "oauth_client": [],
+      "api_key": [
+        {
+          "current_key": "AIzaSyDoCv41EABEanZEFN5NXfiHehle8iNZ5T4"
+        }
+      ],
+      "services": {
+        "appinvite_service": {
+          "other_platform_oauth_client": []
+        }
+      }
+    }
+  ],
+  "configuration_version": "1"
+}

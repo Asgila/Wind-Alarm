@@ -1,0 +1,40 @@
+{
+  "flutter": {
+    "platforms": {
+      "android": {
+        "default": {
+          "projectId": "wind-alarm",
+          "appId": "1:914987001196:android:090774c4f60a9425313f49",
+          "fileOutput": "android/app/google-services.json"
+        }
+      },
+      "dart": {
+        "lib/firebase_options.dart": {
+          "projectId": "wind-alarm",
+          "configurations": {
+            "android": "1:914987001196:android:090774c4f60a9425313f49",
+            "ios": "1:914987001196:ios:b14a7f8fc9d0e2a0313f49",
+            "macos": "1:914987001196:ios:b14a7f8fc9d0e2a0313f49",
+            "web": "1:914987001196:web:f9c018fcae158a78313f49",
+            "windows": "1:914987001196:web:198968fa1946a671313f49"
+          }
+        }
+      }
+    }
+  },
+  "functions": [
+    {
+      "source": "functions",
+      "codebase": "default",
+      "disallowLegacyRuntimeConfig": true,
+      "ignore": [
+        "node_modules",
+        ".git",
+        "firebase-debug.log",
+        "firebase-debug.*.log",
+        "*.local"
+      ]
+      
+    }
+  ]
+}
