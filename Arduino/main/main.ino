@@ -1,4 +1,3 @@
-
 #define ENABLE_USER_AUTH
 #define ENABLE_DATABASE
 
@@ -10,14 +9,14 @@
 
 #include "dmi_prognose.h"
 #include "wind_sensor.h" 
+#include "mqtt.h"            // Tilføjet MQTT
+#include "stepper_control.h" // Tilføjet Stepper motor
 
 #define WIND_SENSOR_PIN 34 
 
-// WiFi legualiteter
-#define WIFI_SSID "OnePlus 8 Pro"
-#define WIFI_PASSWORD "123456789"
-
-// Firebase legualiteter
+// WiFi og Firebase legitimationsoplysninger
+#define WIFI_SSID "Helens iPhone"
+#define WIFI_PASSWORD "ABCD2310"
 #define Web_API_KEY "AIzaSyCkUX5c1GTO6CX1z1ar1f_S0aaAFJVeCsg"
 #define DATABASE_URL "https://wind-alarm-default-rtdb.europe-west1.firebasedatabase.app"
 #define USER_EMAIL "asger.frimor@gmail.com"
@@ -34,21 +33,26 @@ RealtimeDatabase Database;
 
 // --- TIMERE ---
 unsigned long lastDmiAttempt = 0;
-const unsigned long dmiNormalInterval = 3600000; // 1 time
-const unsigned long dmiRetryInterval = 120000;   // 5 minutter ved fejl (ændret til 5 min)
+const unsigned long dmiNormalInterval = 3600000; 
+const unsigned long dmiRetryInterval = 120000;  
 
 unsigned long lastSensorTime = 0;
-const unsigned long sensorInterval = 5000;       // 5 sekunder
+const unsigned long sensorInterval = 5000;       
 
-unsigned long lastWifiCheck = 0;                 // Ny timer til at tjekke WiFi
-const unsigned long wifiCheckInterval = 10000;   // Vent 10 sekunder mellem reconnect-forsøg
+unsigned long lastWifiCheck = 0;                 
+const unsigned long wifiCheckInterval = 10000;   
 
-// --- SENSOR VARIABLER ---
+// --- SENSOR & ALARM VARIABLER ---
 float currentWindSpeed = 0.0;
-bool alarmActive = false;
+bool alarmActive = false; // Den faktiske alarm state vi sender til Firebase
 
 bool forceFirstDmi = true;
 bool previousDmiFailed = false;
+
+// --- HYSTERESIS (Vind logik over tid) ---
+int highWindCount = 0;
+unsigned long cooldownUntil = 0;
+bool previousCombinedAlarm = false; // Bruges til at trigge stepperen, når status ændres
 
 const char* ntpServer = "pool.ntp.org";
 
@@ -70,7 +74,6 @@ void initTime() {
 void setup(){
   Serial.begin(115200);
 
-  // Slå strømbesparelse fra og bed ESP32 om automatisk at genoprette WiFi
   WiFi.setSleep(false);
   WiFi.setAutoReconnect(true); 
 
@@ -81,10 +84,14 @@ void setup(){
     delay(300);
   }
   Serial.println("\nForbundet til WiFi!");
-  initWindSensor(WIND_SENSOR_PIN); 
   
+  initWindSensor(WIND_SENSOR_PIN); 
   initTime();
   
+  // Opsæt stepper og MQTT
+  initStepper();
+  mqtt_setup();
+
   ssl_client.setInsecure();
   ssl_client.setConnectionTimeout(15000); 
   ssl_client.setHandshakeTimeout(15);
@@ -95,42 +102,72 @@ void setup(){
 }
 
 void loop(){
+  // Disse tre funktioner kaldes lynhurtigt i loopet for at holde systemet kørende "non-blocking"
   app.loop();
+  mqtt_loop();
+  loopStepper(); // Styrer motor bevægelsen skridt for skridt
   
   unsigned long currentTime = millis();
 
-  // --- 0. SIKKERHEDSNET: TJEK WIFI FORBINDELSEN ---
   if (WiFi.status() != WL_CONNECTED) {
-    // Hvis vi har mistet forbindelsen, og der er gået 10 sekunder siden sidst vi prøvede
     if (currentTime - lastWifiCheck >= wifiCheckInterval) {
       Serial.println("Advarsel: WiFi mistet! Prøver at genoprette...");
       WiFi.disconnect();
       WiFi.reconnect();
       lastWifiCheck = currentTime;
     }
-    // Return afbryder resten af loopet, så vi ikke prøver at hente DMI eller sende til Firebase uden net
     return; 
   }
 
-  // --- NÅR VI HAR WIFI, KØRER RESTEN AF PROGRAMMET ---
   if (app.ready()){ 
     
-    // --- 1. LIVE SENSOR DATA (Hvert 5. sekund) ---
     // --- 1. LIVE SENSOR DATA (Hvert 5. sekund) ---
     if (currentTime - lastSensorTime >= sensorInterval) {
       lastSensorTime = currentTime;
 
-      // Hent den faktiske vindhastighed fra vores sensor-fil
-      currentWindSpeed = getWindSpeed(WIND_SENSOR_PIN); // <-- ÆNDRET LINJE
-      alarmActive = (currentWindSpeed > 10);  
+      currentWindSpeed = getWindSpeed(WIND_SENSOR_PIN); 
+      
+      // --- LOGIK FOR 10 MÅLINGER & 1 TIMES COOLDOWN ---
+      if (currentWindSpeed > 5.0) {
+        highWindCount++;
+      } else {
+        highWindCount = 0; // Nulstil, hvis vinden løjer af, inden vi når 10
+      }
 
-      Serial.printf("Live data: %.2f m/s, Alarm: %s\n", currentWindSpeed, alarmActive ? "JA" : "NEJ");
+      bool windAlarmActive = false;
+      if (highWindCount >= 5) {
+        // Vi har ramt 10 målinger i træk med blæst. Start 1 times cooldown (3.600.000 ms)
+        cooldownUntil = currentTime + 3600000;
+        highWindCount = 0; 
+      }
+      
+      // Vinden betragtes som en aktiv alarm, hvis vi stadig er i cooldown-perioden
+      if (currentTime < cooldownUntil) {
+        windAlarmActive = true;
+      }
 
+      // --- SAMLET ALARM VURDERING ---
+      // Alarmen er aktiv enten pga. storm (inkl. cooldown) ELLER fordi du manuelt tænder via MQTT
+      bool combinedAlarm = windAlarmActive || dashboardSwitchState;
+      alarmActive = combinedAlarm; 
+
+      // Tjek om der er sket en ændring i tilstanden. Hvis ja, igangsæt motoren.
+      if (combinedAlarm != previousCombinedAlarm) {
+        setStepperTarget(combinedAlarm, dashboardSliderValue);
+        previousCombinedAlarm = combinedAlarm;
+      }
+
+      Serial.printf("Live data: %.2f m/s | Vindalarm: %s | MQTT Switch: %s | Samlet Alarm: %s\n", 
+                    currentWindSpeed, 
+                    windAlarmActive ? "JA" : "NEJ", 
+                    dashboardSwitchState ? "JA" : "NEJ",
+                    alarmActive ? "JA" : "NEJ");
+
+      // Opdatering af Firebase
       Database.set<float>(aClient, "/live/wind_speed", currentWindSpeed, processData, "RTDB_Live_Wind");
       Database.set<bool>(aClient, "/live/alarm_triggered", alarmActive, processData, "RTDB_Live_Alarm");
       
-      // Valgfri besked opdatering
-      String alarmMsg = alarmActive ? "Kritisk vindhastighed overskredet!" : "Vindhastighed normal";
+      String alarmMsg = alarmActive ? "Kritisk vind/MQTT aktiveret!" : "Alt er normalt";
       Database.set<String>(aClient, "/live/message", alarmMsg, processData, "RTDB_Live_Alarm_Msg");
     }
 
@@ -142,12 +179,7 @@ void loop(){
       forceFirstDmi = false;
       
       bool success = send_prognose(aClient, Database, processData);
-      
-      if (success) {
-        previousDmiFailed = false; 
-      } else {
-        previousDmiFailed = true;  
-      }
+      previousDmiFailed = !success;
     }
   }
 }
