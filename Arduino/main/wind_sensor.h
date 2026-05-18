@@ -11,8 +11,6 @@ const float R2 = 47000.0; // 47k ohm
 const float ESP32_REF_VOLTAGE = 3.3; // ESP32's reference spænding for ADC
 
 void initWindSensor(uint8_t pin) {
-  // Pin 34-39 kræver ikke pinMode for analogRead, 
-  // men det er god skik at sætte den til INPUT.
   pinMode(pin, INPUT);
 }
 
@@ -25,14 +23,13 @@ float getWindSpeed(uint8_t pin) {
   }
   float avgAdcValue = sum / 10.0;
 
-  // 2. Beregn den faktiske spænding på ESP32's pin (0 - 3.3V)
+
   // ESP32 har en 12-bit ADC, hvilket betyder værdier fra 0 til 4095
   float pinVoltage = (avgAdcValue / 4095.0) * ESP32_REF_VOLTAGE;
 
-  // 3. Regn "baglæns" gennem spændingsdeleren for at finde sensorens faktiske output
   float sensorVoltage = pinVoltage * ((R1 + R2) / R2);
 
-  // Sikkerhedsblok: Sørg for at vi ikke regner med mere end max spændingen ved udsving
+  // Sørg for at vi ikke regner med mere end max spændingen ved udsving
   if (sensorVoltage > MAX_SENSOR_VOLTAGE) {
     sensorVoltage = MAX_SENSOR_VOLTAGE;
   }

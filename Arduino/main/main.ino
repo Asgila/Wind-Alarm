@@ -49,7 +49,7 @@ bool alarmActive = false; // Den faktiske alarm state vi sender til Firebase
 bool forceFirstDmi = true;
 bool previousDmiFailed = false;
 
-// --- HYSTERESIS (Vind logik over tid) ---
+// --- (Vind logik over tid) ---
 int highWindCount = 0;
 unsigned long cooldownUntil = 0;
 bool previousCombinedAlarm = false; // Bruges til at trigge stepperen, når status ændres
@@ -88,7 +88,7 @@ void setup(){
   initWindSensor(WIND_SENSOR_PIN); 
   initTime();
   
-  // Opsæt stepper og MQTT
+  // init stepper og MQTT
   initStepper();
   mqtt_setup();
 
@@ -102,10 +102,9 @@ void setup(){
 }
 
 void loop(){
-  // Disse tre funktioner kaldes lynhurtigt i loopet for at holde systemet kørende "non-blocking"
   app.loop();
   mqtt_loop();
-  loopStepper(); // Styrer motor bevægelsen skridt for skridt
+  loopStepper(); // Styrer motor bevægelsen trin for trin
   
   unsigned long currentTime = millis();
 
@@ -131,7 +130,7 @@ void loop(){
       if (currentWindSpeed > 5.0) {
         highWindCount++;
       } else {
-        highWindCount = 0; // Nulstil, hvis vinden løjer af, inden vi når 10
+        highWindCount = 0; 
       }
 
       bool windAlarmActive = false;
@@ -141,13 +140,11 @@ void loop(){
         highWindCount = 0; 
       }
       
-      // Vinden betragtes som en aktiv alarm, hvis vi stadig er i cooldown-perioden
       if (currentTime < cooldownUntil) {
         windAlarmActive = true;
       }
 
       // --- SAMLET ALARM VURDERING ---
-      // Alarmen er aktiv enten pga. storm (inkl. cooldown) ELLER fordi du manuelt tænder via MQTT
       bool combinedAlarm = windAlarmActive || dashboardSwitchState;
       alarmActive = combinedAlarm; 
 

@@ -7,7 +7,7 @@
 extern bool dashboardSwitchState; 
 extern int dashboardSliderValue;
 
-// Variabler eksporteret, så main.cpp kan se dem
+// Variabler eksporteret, så main kan se dem
 bool dashboardSwitchState = false; 
 int dashboardSliderValue = 1;
 

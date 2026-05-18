@@ -38,7 +38,7 @@ bool send_prognose(AsyncClientClass &aClient, RealtimeDatabase &Database, AsyncR
     return false;
   }
 
-  // --- 1. BYG DYNAMISK URL MED TIDSBEGRÆNSNING ---
+  
   // Vi bruger gmtime() for at få UTC-tid, som DMI's API kræver
   struct tm *tm_utc_now = gmtime(&now);
   char startStr[24];
@@ -51,7 +51,7 @@ bool send_prognose(AsyncClientClass &aClient, RealtimeDatabase &Database, AsyncR
   char endStr[24];
   strftime(endStr, sizeof(endStr), "%Y-%m-%dT%H:00:00Z", tm_utc_tomorrow);
 
-  // Sæt det hele sammen til én URL
+  // Sæt det hele sammen til en URL
   String dmi_url = "https://opendataapi.dmi.dk/v1/forecastedr/collections/harmonie_dini_sf/position?coords=POINT%2812.07%2055.61%29&crs=crs84&parameter-name=wind-speed,gust-wind-speed-10m&f=GeoJSON&datetime=";
   dmi_url += startStr;
   dmi_url += "/";
@@ -65,7 +65,7 @@ bool send_prognose(AsyncClientClass &aClient, RealtimeDatabase &Database, AsyncR
   
   http.setTimeout(45000); 
   
-  // Vi kalder nu med vores nye "korte" URL
+  // Vi kalder nu med vores nye URL
   if (http.begin(client, dmi_url)) {
     int httpCode = http.GET();
     
